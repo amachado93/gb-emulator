@@ -7,6 +7,7 @@ use registers::Registers;
 pub struct Cpu {
     pub regs: Registers,
     pub halted: bool,
+    pub ime: bool, // interrupt master enable
 }
 
 impl Cpu {
@@ -14,6 +15,7 @@ impl Cpu {
         Self {
             regs: Registers::default(),
             halted: false,
+            ime: false,
         }
     }
 
@@ -24,5 +26,6 @@ impl Cpu {
             ..Default::default()
         };
         self.halted = false;
+        self.ime = false;
     }
 }

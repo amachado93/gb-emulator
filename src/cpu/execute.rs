@@ -16,9 +16,101 @@ impl Cpu {
 
     fn execute_instruction(&mut self, instr: Instruction, bus: &mut Bus) -> u8 {
         match instr {
+            Instruction::NOP => 4,
+            Instruction::LDBCD16 => self.ld_bc_d16(bus),
+            Instruction::LDBCA => self.ld_bc_a(bus),
+            Instruction::INCBC => self.inc_bc(),
+            Instruction::INCHL => self.inc_hl(),
+            Instruction::JRZR8 => self.jr_z_r8(bus),
+            Instruction::LDAHLINC => self.ld_a_hlinc(bus),
             Instruction::ADD(target) => self.add(target),
-            Instruction::LDIMM8(reg) => self.id_imm8(reg, bus),
+            Instruction::ORC => self.or_c(),
+            Instruction::LDIMM8(reg) => self.ld_imm8(reg, bus),
+            Instruction::LDHLD16 => self.ld_hl_d16(bus),
+            Instruction::LDA8A => self.ld_a8_a(bus),
+            Instruction::LDA16A => self.ld_a16_a(bus),
+            Instruction::LDAA16 => self.ld_a_a16(bus),
+            Instruction::JRR8 => self.jr_r8(bus),
+            Instruction::LDRegReg(dst, src) => self.ld_reg_reg(dst, src),
+            Instruction::LDSPD16 => self.ld_sp_d16(bus),
+            Instruction::CP(reg) => self.cp(reg),
+            Instruction::JPA16 => self.jp_a16(bus),
+            Instruction::PUSHBC => self.push_bc(bus),
+            Instruction::CALLA16 => self.call_a16(bus),
+            Instruction::RET => self.ret(bus),
+            Instruction::PUSHHL => self.push_hl(bus),
+            Instruction::POPHL => self.pop_hl(bus),
+            Instruction::DI => self.di(),
+            Instruction::LDHAA8 => self.ldh_a_a8(bus),
+            Instruction::POPAF => self.pop_af(bus),
+            Instruction::PUSHAF => self.push_af(bus),
         }
+    }
+
+    fn ld_bc_d16(&mut self, bus: &mut Bus) -> u8 {
+        // read 16-bit immediate (lil endian)
+        let lo = bus.read8(self.regs.pc) as u16;
+        self.regs.pc = self.regs.pc.wrapping_add(1);
+
+        // then high
+        let hi = bus.read8(self.regs.pc) as u16;
+        self.regs.pc = self.regs.pc.wrapping_add(1);
+
+        let value = (hi << 8) | lo;
+
+        self.regs.set_bc(value);
+
+        12
+    }
+
+    fn ld_bc_a(&mut self, bus: &mut Bus) -> u8 {
+        let addr = self.regs.get_bc();
+        bus.write8(addr, self.regs.a);
+
+        8
+    }
+
+    fn inc_bc(&mut self) -> u8 {
+        let data = self.regs.get_bc();
+        let result = data.wrapping_add(1);
+
+        self.regs.set_bc(result);
+
+        8
+    }
+
+    fn inc_hl(&mut self) -> u8 {
+        let data = self.regs.get_hl();
+        let result = data.wrapping_add(1);
+
+        self.regs.set_hl(result);
+
+        8
+    }
+
+    fn jr_z_r8(&mut self, bus: &mut Bus) -> u8 {
+        // read signed 8-bit offset
+        let offset = bus.read8(self.regs.pc) as i8;
+        self.regs.pc = self.regs.pc.wrapping_add(1);
+
+        // check Zero flag
+        if self.regs.get_z() {
+            // PC is already pointing to the next instruction
+            self.regs.pc = self.regs.pc.wrapping_add(offset as u16);
+
+            12
+        } else {
+            8
+        }
+    }
+
+    fn ld_a_hlinc(&mut self, bus: &mut Bus) -> u8 {
+        let hl = self.regs.get_hl();
+
+        self.regs.a = bus.read8(hl);
+        self.regs.set_hl(hl.wrapping_add(1));
+
+        8
     }
 
     fn add(&mut self, target: ArithmeticTarget) -> u8 {
@@ -43,10 +135,23 @@ impl Cpu {
 
         self.regs.a = result;
 
+        4 // we return the number of cycles
+    }
+
+    fn or_c(&mut self) -> u8 {
+        let result = self.regs.a | self.regs.c;
+        self.regs.a = result;
+
+        // flags are set after bitwise OR operation
+        self.regs.set_z(result == 0);
+        self.regs.set_n(false); // make sure n, h, and c are cleared
+        self.regs.set_h(false);
+        self.regs.set_c(false);
+
         4
     }
 
-    fn id_imm8(&mut self, reg: Register8, bus: &mut Bus) -> u8 {
+    fn ld_imm8(&mut self, reg: Register8, bus: &mut Bus) -> u8 {
         let value = bus.read8(self.regs.pc);
         self.regs.pc = self.regs.pc.wrapping_add(1);
 
@@ -61,5 +166,292 @@ impl Cpu {
         }
 
         8
+    }
+
+    fn ld_hl_d16(&mut self, bus: &mut Bus) -> u8 {
+        // read 16-bit immediate (lil endian)
+        let lo = bus.read8(self.regs.pc) as u16;
+        self.regs.pc = self.regs.pc.wrapping_add(1);
+
+        let hi = bus.read8(self.regs.pc) as u16;
+        self.regs.pc = self.regs.pc.wrapping_add(1);
+
+        let value = (hi << 8) | lo;
+
+        self.regs.set_hl(value);
+        12
+    }
+
+    fn ld_a16_a(&mut self, bus: &mut Bus) -> u8 {
+        // read 16-bit immediate (little endian)
+        let lo = bus.read8(self.regs.pc) as u16;
+        self.regs.pc = self.regs.pc.wrapping_add(1);
+
+        let hi = bus.read8(self.regs.pc) as u16;
+        self.regs.pc = self.regs.pc.wrapping_add(1);
+
+        let addr = (hi << 8) | lo;
+
+        bus.write8(addr, self.regs.a);
+
+        16
+    }
+
+    fn ld_sp_d16(&mut self, bus: &mut Bus) -> u8 {
+        // read 16-bit immediate address (little endian)
+        let lo = bus.read8(self.regs.pc) as u16;
+        self.regs.pc = self.regs.pc.wrapping_add(1);
+
+        let hi = bus.read8(self.regs.pc) as u16;
+        self.regs.pc = self.regs.pc.wrapping_add(1);
+
+        let value = (hi << 8) | lo;
+
+        self.regs.sp = value;
+
+        12
+    }
+
+    fn ld_a8_a(&mut self, bus: &mut Bus) -> u8 {
+        let offset = bus.read8(self.regs.pc) as u16;
+        self.regs.pc = self.regs.pc.wrapping_add(1);
+
+        let addr = 0xFF00 | offset;
+
+        bus.write8(addr, self.regs.a);
+
+        12
+    }
+
+    fn ld_a_a16(&mut self, bus: &mut Bus) -> u8 {
+        // read 16-bit immediate address (little endian)
+        let lo = bus.read8(self.regs.pc) as u16;
+        self.regs.pc = self.regs.pc.wrapping_add(1);
+
+        let hi = bus.read8(self.regs.pc) as u16;
+        self.regs.pc = self.regs.pc.wrapping_add(1);
+
+        let addr = (hi << 8) | lo;
+
+        // read from memory into A
+        self.regs.a = bus.read8(addr);
+
+        16
+    }
+
+    fn jr_r8(&mut self, bus: &mut Bus) -> u8 {
+        // read signed 8-bit offset
+        let offset = bus.read8(self.regs.pc) as i8;
+        self.regs.pc = self.regs.pc.wrapping_add(1);
+
+        // PC-relative jump
+
+        self.regs.pc = self.regs.pc.wrapping_add(offset as u16);
+
+        12
+    }
+
+    fn ld_reg_reg(&mut self, dst: Register8, src: Register8) -> u8 {
+        let value = match src {
+            Register8::A => self.regs.a,
+            Register8::B => self.regs.b,
+            Register8::C => self.regs.c,
+            Register8::D => self.regs.d,
+            Register8::E => self.regs.e,
+            Register8::H => self.regs.h,
+            Register8::L => self.regs.l,
+        };
+
+        match dst {
+            Register8::A => self.regs.a = value,
+            Register8::B => self.regs.b = value,
+            Register8::C => self.regs.c = value,
+            Register8::D => self.regs.d = value,
+            Register8::E => self.regs.e = value,
+            Register8::H => self.regs.h = value,
+            Register8::L => self.regs.l = value,
+        }
+
+        4
+    }
+
+    fn cp(&mut self, reg: Register8) -> u8 {
+        let value = match reg {
+            Register8::A => self.regs.a,
+            Register8::B => self.regs.b,
+            Register8::C => self.regs.c,
+            Register8::D => self.regs.d,
+            Register8::E => self.regs.e,
+            Register8::H => self.regs.h,
+            Register8::L => self.regs.l,
+        };
+
+        let a = self.regs.a;
+        let result = a.wrapping_sub(value);
+
+        // Flags - this is important!!
+        self.regs.set_z(result == 0);
+        self.regs.set_n(true);
+        self.regs.set_h((a & 0xF) < (value & 0xF));
+        self.regs.set_c(a < value);
+
+        // NOTE: A is not modified!
+
+        4
+    }
+
+    fn jp_a16(&mut self, bus: &mut Bus) -> u8 {
+        // read 16-bit immediate (lil endian)
+        let lo = bus.read8(self.regs.pc) as u16;
+        self.regs.pc = self.regs.pc.wrapping_add(1);
+
+        let hi = bus.read8(self.regs.pc) as u16;
+        self.regs.pc = self.regs.pc.wrapping_add(1);
+
+        let addr = (hi << 8) | lo;
+
+        // jump
+        self.regs.pc = addr;
+
+        16
+    }
+
+    fn push_bc(&mut self, bus: &mut Bus) -> u8 {
+        let b = self.regs.b;
+        let c = self.regs.c;
+
+        // push high byte first
+        self.regs.sp = self.regs.sp.wrapping_sub(1);
+        bus.write8(self.regs.sp, b);
+
+        // then low byte
+        self.regs.sp = self.regs.sp.wrapping_sub(1);
+        bus.write8(self.regs.sp, c);
+
+        16
+    }
+
+    fn call_a16(&mut self, bus: &mut Bus) -> u8 {
+        // read target address (lil endian)
+        let lo = bus.read8(self.regs.pc) as u16;
+        self.regs.pc = self.regs.pc.wrapping_add(1);
+
+        let hi = bus.read8(self.regs.pc) as u16;
+        self.regs.pc = self.regs.pc.wrapping_add(1);
+
+        let target = (hi << 8) | lo;
+
+        // push return address (PC after operands)
+        let ret = self.regs.pc;
+
+        // push high byte first
+        self.regs.sp = self.regs.sp.wrapping_sub(1);
+        bus.write8(self.regs.sp, (ret >> 8) as u8);
+
+        // then low byte
+        self.regs.sp = self.regs.sp.wrapping_sub(1);
+        bus.write8(self.regs.sp, (ret & 0xFF) as u8);
+
+        // jump
+        self.regs.pc = target;
+
+        24
+    }
+
+    fn pop_hl(&mut self, bus: &mut Bus) -> u8 {
+        // pop low byte
+        let lo = bus.read8(self.regs.sp) as u16;
+        self.regs.sp = self.regs.sp.wrapping_add(1);
+
+        // then high byte
+        let hi = bus.read8(self.regs.sp) as u16;
+        self.regs.sp = self.regs.sp.wrapping_add(1);
+
+        let value = (hi << 8) | lo;
+
+        self.regs.set_hl(value);
+
+        12
+    }
+
+    fn push_hl(&mut self, bus: &mut Bus) -> u8 {
+        let h = self.regs.h;
+        let l = self.regs.l;
+
+        // push high byte first
+        self.regs.sp = self.regs.sp.wrapping_sub(1);
+        bus.write8(self.regs.sp, h);
+
+        // then low byte
+        self.regs.sp = self.regs.sp.wrapping_sub(1);
+        bus.write8(self.regs.sp, l);
+
+        16
+    }
+
+    fn ret(&mut self, bus: &mut Bus) -> u8 {
+        // pop low byte
+        let lo = bus.read8(self.regs.sp) as u16;
+        self.regs.sp = self.regs.sp.wrapping_add(1);
+
+        // pop high byte
+        let hi = bus.read8(self.regs.sp) as u16;
+        self.regs.sp = self.regs.sp.wrapping_add(1);
+
+        let addr = (hi << 8) | lo;
+
+        self.regs.pc = addr;
+
+        16
+    }
+
+    fn di(&mut self) -> u8 {
+        self.ime = false;
+        4
+    }
+
+    fn ldh_a_a8(&mut self, bus: &mut Bus) -> u8 {
+        let lo = bus.read8(self.regs.pc) as u16;
+        self.regs.pc = self.regs.pc.wrapping_add(1);
+
+        let hi = 0xFF;
+        let addr = (hi << 8) | lo;
+
+        self.regs.a = bus.read8(addr);
+
+        12
+    }
+
+    fn pop_af(&mut self, bus: &mut Bus) -> u8 {
+        // pop lower byte
+        let lo = bus.read8(self.regs.sp) as u16;
+        self.regs.sp = self.regs.sp.wrapping_add(1);
+
+        // pop high byte
+        let hi = bus.read8(self.regs.sp) as u16;
+        self.regs.sp = self.regs.sp.wrapping_add(1);
+
+        let value = (hi << 8) | lo;
+        self.regs.set_af(value);
+
+        12
+    }
+
+    fn push_af(&mut self, bus: &mut Bus) -> u8 {
+        let a = self.regs.a;
+        let f = self.regs.f;
+
+        // because F is the flags reg (aka restricted), ensure bits 3 to 0 are cleared
+        let cleared_f = f & !0x0F;
+
+        // first push high byte
+        self.regs.sp = self.regs.sp.wrapping_sub(1);
+        bus.write8(self.regs.sp, a);
+
+        // then low byte
+        self.regs.sp = self.regs.sp.wrapping_sub(1);
+        bus.write8(self.regs.sp, cleared_f);
+
+        16
     }
 }
