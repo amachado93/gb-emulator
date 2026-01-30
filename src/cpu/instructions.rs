@@ -6,30 +6,35 @@ pub enum Instruction {
     LDBCD16,  // LD BC, d16
     LDBCA,    // LD (BC), A
     INCBC,    // INC BC
+    JRNZR8,   // JR NZ, r8
     INCHL,    // INC HL
     JRZR8,    // JR Z, r8
     LDAHLINC, // LD A, (HL+)
     ADD(ArithmeticTarget),
     ORC, // OR C
     LDIMM8(Register8),
-    LDA8A,   // LD (a8), A
-    LDA16A,  // LD (a16), A
-    LDAA16,  // LD A, (a16)
-    LDHLD16, // LD HL, d16
-    JRR8,    // JR r8
-    JPA16,   // JP a16
+    LDA8A,     // LD (a8), A
+    LDA16A,    // LD (a16), A
+    LDAA16,    // LD A, (a16)
+    LDHLD16,   // LD HL, d16
+    JRR8,      // JR r8
+    JPA16,     // JP a16
+    CALLNZA16, // CALL NZ, a16
+    POPBC,
     CALLA16, // CALL a16
     RET,
-    LDRegReg(Register8, Register8),
-    CP(Register8),
+    LDRegReg(Operand8, Operand8),
+    CP(Operand8),
     DI,
     LDSPD16,
     PUSHBC,
     POPHL,
     PUSHHL,
+    ANDD8,
     LDHAA8,
     POPAF,
     PUSHAF,
+    CPD8,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -54,6 +59,12 @@ pub enum Register8 {
     L,
 }
 
+#[derive(Debug, Copy, Clone)]
+pub enum Operand8 {
+    Reg(Register8),
+    IndHL,
+}
+
 pub fn decode(opcode: u8) -> Instruction {
     match opcode {
         0x00 => Instruction::NOP,
@@ -61,6 +72,7 @@ pub fn decode(opcode: u8) -> Instruction {
         0x02 => Instruction::LDBCA,
         0x03 => Instruction::INCBC,
 
+        0x20 => Instruction::JRNZR8,
         0x21 => Instruction::LDHLD16,
         0x23 => Instruction::INCHL,
         0x28 => Instruction::JRZR8,
@@ -116,7 +128,9 @@ pub fn decode(opcode: u8) -> Instruction {
         // JR r8
         0x18 => Instruction::JRR8,
 
+        0xC1 => Instruction::POPBC,
         0xC3 => Instruction::JPA16,
+        0xC4 => Instruction::CALLNZA16,
         0xC5 => Instruction::PUSHBC,
 
         // CALLA16
@@ -129,25 +143,28 @@ pub fn decode(opcode: u8) -> Instruction {
 
         // PUSH HL
         0xE5 => Instruction::PUSHHL,
+        0xE6 => Instruction::ANDD8,
 
         0xF0 => Instruction::LDHAA8,
         0xF1 => Instruction::POPAF,
         0xF3 => Instruction::DI,
         0xF5 => Instruction::PUSHAF,
+        0xFE => Instruction::CPD8,
 
         _ => panic!("Unimplemented opcode: 0x{:02X}", opcode),
     }
 }
 
-fn decode_reg(bits: u8) -> Register8 {
+fn decode_reg(bits: u8) -> Operand8 {
     match bits {
-        0b000 => Register8::B,
-        0b001 => Register8::C,
-        0b010 => Register8::D,
-        0b011 => Register8::E,
-        0b100 => Register8::H,
-        0b101 => Register8::L,
-        0b111 => Register8::A,
-        _ => panic!("(HL) not implemented yet..."),
+        0b000 => Operand8::Reg(Register8::B),
+        0b001 => Operand8::Reg(Register8::C),
+        0b010 => Operand8::Reg(Register8::D),
+        0b011 => Operand8::Reg(Register8::E),
+        0b100 => Operand8::Reg(Register8::H),
+        0b101 => Operand8::Reg(Register8::L),
+        0b111 => Operand8::Reg(Register8::A),
+        0b110 => Operand8::IndHL,
+        _ => unreachable!("Unsupported Operand8: 0b{:03b}...", bits),
     }
 }

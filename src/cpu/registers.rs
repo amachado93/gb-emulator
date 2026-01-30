@@ -1,3 +1,5 @@
+use crate::cpu::instructions::Register8;
+
 #[derive(Default)]
 pub struct Registers {
     pub a: u8,
@@ -89,6 +91,32 @@ impl Registers {
     }
     pub fn set_c(&mut self, v: bool) {
         self.f = if v { self.f | C } else { self.f & !C }
+    }
+
+    // helper for reading 8bit regs
+    pub fn read_reg8(&self, reg: Register8) -> u8 {
+        match reg {
+            Register8::A => self.a,
+            Register8::B => self.b,
+            Register8::C => self.c,
+            Register8::D => self.d,
+            Register8::E => self.e,
+            Register8::H => self.h,
+            Register8::L => self.l,
+        }
+    }
+
+    // helper for writing 8bit regs
+    pub fn write_reg8(&mut self, reg: Register8, value: u8) {
+        match reg {
+            Register8::A => self.a = value,
+            Register8::B => self.b = value,
+            Register8::C => self.c = value,
+            Register8::D => self.d = value,
+            Register8::E => self.e = value,
+            Register8::H => self.h = value,
+            Register8::L => self.l = value,
+        }
     }
 }
 

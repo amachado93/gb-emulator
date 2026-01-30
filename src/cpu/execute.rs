@@ -22,6 +22,7 @@ impl Cpu {
             Instruction::INCBC => self.inc_bc(),
             Instruction::INCHL => self.inc_hl(),
             Instruction::JRZR8 => self.jr_z_r8(bus),
+            Instruction::JRNZR8 => self.jr_nz_r8(bus),
             Instruction::LDAHLINC => self.ld_a_hlinc(bus),
             Instruction::ADD(target) => self.add(target),
             Instruction::ORC => self.or_c(),
@@ -31,19 +32,23 @@ impl Cpu {
             Instruction::LDA16A => self.ld_a16_a(bus),
             Instruction::LDAA16 => self.ld_a_a16(bus),
             Instruction::JRR8 => self.jr_r8(bus),
-            Instruction::LDRegReg(dst, src) => self.ld_reg_reg(dst, src),
+            Instruction::LDRegReg(dst, src) => self.ld_reg_reg(dst, src, bus),
             Instruction::LDSPD16 => self.ld_sp_d16(bus),
-            Instruction::CP(reg) => self.cp(reg),
+            Instruction::CP(reg) => self.cp(reg, bus),
+            Instruction::POPBC => self.pop_bc(bus),
             Instruction::JPA16 => self.jp_a16(bus),
+            Instruction::CALLNZA16 => self.call_nz_a16(bus),
             Instruction::PUSHBC => self.push_bc(bus),
             Instruction::CALLA16 => self.call_a16(bus),
             Instruction::RET => self.ret(bus),
             Instruction::PUSHHL => self.push_hl(bus),
+            Instruction::ANDD8 => self.and_d8(bus),
             Instruction::POPHL => self.pop_hl(bus),
             Instruction::DI => self.di(),
             Instruction::LDHAA8 => self.ldh_a_a8(bus),
             Instruction::POPAF => self.pop_af(bus),
             Instruction::PUSHAF => self.push_af(bus),
+            Instruction::CPD8 => self.cp_d8(bus),
         }
     }
 
@@ -98,6 +103,19 @@ impl Cpu {
             // PC is already pointing to the next instruction
             self.regs.pc = self.regs.pc.wrapping_add(offset as u16);
 
+            12
+        } else {
+            8
+        }
+    }
+
+    // this can be read as - Jump if Zero flag is _not_ set
+    fn jr_nz_r8(&mut self, bus: &mut Bus) -> u8 {
+        let e = bus.read8(self.regs.pc) as i8;
+        self.regs.pc = self.regs.pc.wrapping_add(1);
+
+        if !self.regs.get_z() {
+            self.regs.pc = self.regs.pc.wrapping_add(e as u16);
             12
         } else {
             8
@@ -251,39 +269,38 @@ impl Cpu {
         12
     }
 
-    fn ld_reg_reg(&mut self, dst: Register8, src: Register8) -> u8 {
+    fn ld_reg_reg(&mut self, dst: Operand8, src: Operand8, bus: &mut Bus) -> u8 {
         let value = match src {
-            Register8::A => self.regs.a,
-            Register8::B => self.regs.b,
-            Register8::C => self.regs.c,
-            Register8::D => self.regs.d,
-            Register8::E => self.regs.e,
-            Register8::H => self.regs.h,
-            Register8::L => self.regs.l,
+            Operand8::Reg(r) => self.regs.read_reg8(r),
+            Operand8::IndHL => {
+                let addr = self.regs.get_hl();
+                bus.read8(addr)
+            }
         };
 
         match dst {
-            Register8::A => self.regs.a = value,
-            Register8::B => self.regs.b = value,
-            Register8::C => self.regs.c = value,
-            Register8::D => self.regs.d = value,
-            Register8::E => self.regs.e = value,
-            Register8::H => self.regs.h = value,
-            Register8::L => self.regs.l = value,
+            Operand8::Reg(r) => self.regs.write_reg8(r, value),
+            Operand8::IndHL => {
+                let addr = self.regs.get_hl();
+                bus.write8(addr, value)
+            }
         }
 
-        4
+        // timing depends on whether (HL) was involved
+        if matches!(src, Operand8::IndHL) || matches!(dst, Operand8::IndHL) {
+            8
+        } else {
+            4
+        }
     }
 
-    fn cp(&mut self, reg: Register8) -> u8 {
-        let value = match reg {
-            Register8::A => self.regs.a,
-            Register8::B => self.regs.b,
-            Register8::C => self.regs.c,
-            Register8::D => self.regs.d,
-            Register8::E => self.regs.e,
-            Register8::H => self.regs.h,
-            Register8::L => self.regs.l,
+    fn cp(&mut self, op: Operand8, bus: &Bus) -> u8 {
+        let value = match op {
+            Operand8::Reg(r) => self.regs.read_reg8(r),
+            Operand8::IndHL => {
+                let addr = self.regs.get_hl();
+                bus.read8(addr)
+            }
         };
 
         let a = self.regs.a;
@@ -297,7 +314,24 @@ impl Cpu {
 
         // NOTE: A is not modified!
 
-        4
+        // timing
+        match op {
+            Operand8::Reg(_) => 4,
+            Operand8::IndHL => 8,
+        }
+    }
+
+    fn pop_bc(&mut self, bus: &mut Bus) -> u8 {
+        let lo = bus.read8(self.regs.sp) as u16;
+        self.regs.sp = self.regs.sp.wrapping_add(1);
+
+        let hi = bus.read8(self.regs.sp) as u16;
+        self.regs.sp = self.regs.sp.wrapping_add(1);
+
+        let value = (hi << 8) | lo;
+        self.regs.set_bc(value);
+
+        12
     }
 
     fn jp_a16(&mut self, bus: &mut Bus) -> u8 {
@@ -314,6 +348,36 @@ impl Cpu {
         self.regs.pc = addr;
 
         16
+    }
+
+    fn call_nz_a16(&mut self, bus: &mut Bus) -> u8 {
+        let lo = bus.read8(self.regs.pc) as u16;
+        self.regs.pc = self.regs.pc.wrapping_add(1);
+
+        let hi = bus.read8(self.regs.pc) as u16;
+        self.regs.pc = self.regs.pc.wrapping_add(1);
+
+        let target = (hi << 8) | lo;
+
+        // push return address (PC after operands)
+        let ret = self.regs.pc;
+
+        if !self.regs.get_z() {
+            // push high byte first
+            self.regs.sp = self.regs.sp.wrapping_sub(1);
+            bus.write8(self.regs.sp, (ret >> 8) as u8);
+
+            // then low byte
+            self.regs.sp = self.regs.sp.wrapping_sub(1);
+            bus.write8(self.regs.sp, (ret & 0xFF) as u8);
+
+            // jump
+            self.regs.pc = target;
+
+            24
+        } else {
+            12
+        }
     }
 
     fn push_bc(&mut self, bus: &mut Bus) -> u8 {
@@ -356,6 +420,21 @@ impl Cpu {
         self.regs.pc = target;
 
         24
+    }
+
+    fn and_d8(&mut self, bus: &mut Bus) -> u8 {
+        let n = bus.read8(self.regs.pc);
+        self.regs.pc = self.regs.pc.wrapping_add(1);
+
+        let result = self.regs.a & n;
+        self.regs.a = result;
+
+        self.regs.set_z(result == 0);
+        self.regs.set_n(false);
+        self.regs.set_h(true);
+        self.regs.set_c(false);
+
+        8
     }
 
     fn pop_hl(&mut self, bus: &mut Bus) -> u8 {
@@ -453,5 +532,21 @@ impl Cpu {
         bus.write8(self.regs.sp, cleared_f);
 
         16
+    }
+
+    fn cp_d8(&mut self, bus: &mut Bus) -> u8 {
+        let n = bus.read8(self.regs.pc); // read the immediate data
+        self.regs.pc = self.regs.pc.wrapping_add(1);
+
+        let reg_a = self.regs.a;
+        let result = reg_a.wrapping_sub(n);
+
+        // set flags
+        self.regs.set_z(result == 0);
+        self.regs.set_n(true);
+        self.regs.set_h((reg_a & 0x0F) < (n & 0x0F));
+        self.regs.set_c((reg_a & 0xFF) < (n & 0xFF));
+
+        8
     }
 }
