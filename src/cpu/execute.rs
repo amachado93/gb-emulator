@@ -20,14 +20,21 @@ impl Cpu {
             Instruction::LDBCD16 => self.ld_bc_d16(bus),
             Instruction::LDBCA => self.ld_bc_a(bus),
             Instruction::INCBC => self.inc_bc(),
+            Instruction::DECB => self.dec_b(),
             Instruction::INCHL => self.inc_hl(),
+            Instruction::INCH => self.inc_h(),
+            Instruction::LDDED16 => self.ld_de_d16(bus),
+            Instruction::INCDE => self.inc_de(),
+            Instruction::LDADE => self.ld_a_de(bus),
             Instruction::JRZR8 => self.jr_z_r8(bus),
             Instruction::JRNZR8 => self.jr_nz_r8(bus),
             Instruction::LDAHLINC => self.ld_a_hlinc(bus),
+            Instruction::INCL => self.inc_c(),
             Instruction::ADD(target) => self.add(target),
             Instruction::ORC => self.or_c(),
             Instruction::LDIMM8(reg) => self.ld_imm8(reg, bus),
             Instruction::LDHLD16 => self.ld_hl_d16(bus),
+            Instruction::LDHLPOSA => self.ld_hlpos_a(bus),
             Instruction::LDA8A => self.ld_a8_a(bus),
             Instruction::LDA16A => self.ld_a16_a(bus),
             Instruction::LDAA16 => self.ld_a_a16(bus),
@@ -35,10 +42,18 @@ impl Cpu {
             Instruction::LDRegReg(dst, src) => self.ld_reg_reg(dst, src, bus),
             Instruction::LDSPD16 => self.ld_sp_d16(bus),
             Instruction::CP(reg) => self.cp(reg, bus),
+            Instruction::XORB => self.xor_b(),
+            Instruction::XORC => self.xor_c(),
+            Instruction::XORD => self.xor_d(),
+            Instruction::XORE => self.xor_e(),
+            Instruction::XORH => self.xor_h(),
+            Instruction::XORL => self.xor_l(),
+            Instruction::XORA => self.xor_a(),
             Instruction::POPBC => self.pop_bc(bus),
             Instruction::JPA16 => self.jp_a16(bus),
             Instruction::CALLNZA16 => self.call_nz_a16(bus),
             Instruction::PUSHBC => self.push_bc(bus),
+            Instruction::ADDAD8 => self.add_a_d8(bus),
             Instruction::CALLA16 => self.call_a16(bus),
             Instruction::RET => self.ret(bus),
             Instruction::PUSHHL => self.push_hl(bus),
@@ -84,11 +99,68 @@ impl Cpu {
         8
     }
 
+    fn dec_b(&mut self) -> u8 {
+        let orig_val = self.regs.b;
+        let result = self.regs.b.wrapping_sub(1);
+
+        self.regs.b = result;
+
+        // flags
+        self.regs.set_z(result == 0);
+        self.regs.set_n(true);
+        self.regs.set_h((orig_val & 0x0F) == 0x0F);
+
+        4
+    }
+
     fn inc_hl(&mut self) -> u8 {
         let data = self.regs.get_hl();
         let result = data.wrapping_add(1);
 
         self.regs.set_hl(result);
+
+        8
+    }
+
+    fn inc_h(&mut self) -> u8 {
+        let orig_val = self.regs.h;
+        let result = self.regs.h.wrapping_add(1);
+
+        self.regs.h = result;
+
+        // flags
+        self.regs.set_z(result == 0);
+        self.regs.set_n(false);
+        self.regs.set_h((orig_val & 0x0F) == 0x0F);
+
+        4
+    }
+
+    fn ld_de_d16(&mut self, bus: &mut Bus) -> u8 {
+        let lo = bus.read8(self.regs.pc) as u16;
+        self.regs.pc = self.regs.pc.wrapping_add(1);
+
+        let hi = bus.read8(self.regs.pc) as u16;
+        self.regs.pc = self.regs.pc.wrapping_add(1);
+
+        let value = (hi << 8) | lo;
+
+        self.regs.set_de(value);
+
+        12
+    }
+
+    fn inc_de(&mut self) -> u8 {
+        let data = self.regs.get_de();
+        let result = data.wrapping_add(1);
+
+        self.regs.set_de(result);
+
+        8
+    }
+
+    fn ld_a_de(&mut self, bus: &mut Bus) -> u8 {
+        self.regs.a = bus.read8(self.regs.get_de());
 
         8
     }
@@ -129,6 +201,19 @@ impl Cpu {
         self.regs.set_hl(hl.wrapping_add(1));
 
         8
+    }
+
+    fn inc_c(&mut self) -> u8 {
+        let orig_val = self.regs.c;
+        let result = self.regs.c.wrapping_add(1);
+        self.regs.c = result;
+
+        // flags
+        self.regs.set_z(result == 0);
+        self.regs.set_n(false);
+        self.regs.set_h((orig_val & 0x0F) == 0x0F);
+
+        4
     }
 
     fn add(&mut self, target: ArithmeticTarget) -> u8 {
@@ -230,6 +315,15 @@ impl Cpu {
         12
     }
 
+    fn ld_hlpos_a(&mut self, bus: &mut Bus) -> u8 {
+        let hl = self.regs.get_hl();
+        bus.write8(hl, self.regs.a);
+
+        self.regs.set_hl(hl.wrapping_add(1));
+
+        8
+    }
+
     fn ld_a8_a(&mut self, bus: &mut Bus) -> u8 {
         let offset = bus.read8(self.regs.pc) as u16;
         self.regs.pc = self.regs.pc.wrapping_add(1);
@@ -321,6 +415,97 @@ impl Cpu {
         }
     }
 
+    fn xor_b(&mut self) -> u8 {
+        let result = self.regs.a ^ self.regs.b;
+        self.regs.a = result;
+
+        // flags
+        self.regs.set_z(result == 0);
+        self.regs.set_n(false);
+        self.regs.set_h(false);
+        self.regs.set_c(false);
+
+        4
+    }
+
+    fn xor_c(&mut self) -> u8 {
+        let result = self.regs.a ^ self.regs.c;
+        self.regs.a = result;
+
+        // flags
+        self.regs.set_z(result == 0);
+        self.regs.set_n(false);
+        self.regs.set_h(false);
+        self.regs.set_c(false);
+
+        4
+    }
+
+    fn xor_d(&mut self) -> u8 {
+        let result = self.regs.a ^ self.regs.d;
+        self.regs.a = result;
+
+        // flags
+        self.regs.set_z(result == 0);
+        self.regs.set_n(false);
+        self.regs.set_h(false);
+        self.regs.set_c(false);
+
+        4
+    }
+
+    fn xor_e(&mut self) -> u8 {
+        let result = self.regs.a ^ self.regs.e;
+        self.regs.a = result;
+
+        // flags
+        self.regs.set_z(result == 0);
+        self.regs.set_n(false);
+        self.regs.set_h(false);
+        self.regs.set_c(false);
+
+        4
+    }
+
+    fn xor_h(&mut self) -> u8 {
+        let result = self.regs.a ^ self.regs.h;
+        self.regs.a = result;
+
+        // flags
+        self.regs.set_z(result == 0);
+        self.regs.set_n(false);
+        self.regs.set_h(false);
+        self.regs.set_c(false);
+
+        4
+    }
+
+    fn xor_l(&mut self) -> u8 {
+        let result = self.regs.a ^ self.regs.l;
+        self.regs.a = result;
+
+        // flags
+        self.regs.set_z(result == 0);
+        self.regs.set_n(false);
+        self.regs.set_h(false);
+        self.regs.set_c(false);
+
+        4
+    }
+
+    fn xor_a(&mut self) -> u8 {
+        let result = self.regs.a ^ self.regs.a;
+        self.regs.a = result;
+
+        // flags
+        self.regs.set_z(result == 0);
+        self.regs.set_n(false);
+        self.regs.set_h(false);
+        self.regs.set_c(false);
+
+        4
+    }
+
     fn pop_bc(&mut self, bus: &mut Bus) -> u8 {
         let lo = bus.read8(self.regs.sp) as u16;
         self.regs.sp = self.regs.sp.wrapping_add(1);
@@ -393,6 +578,23 @@ impl Cpu {
         bus.write8(self.regs.sp, c);
 
         16
+    }
+
+    fn add_a_d8(&mut self, bus: &mut Bus) -> u8 {
+        let reg_a = self.regs.a;
+        let n = bus.read8(self.regs.pc);
+        self.regs.pc = self.regs.pc.wrapping_add(1);
+
+        let result = reg_a.wrapping_add(n);
+        self.regs.a = result;
+
+        // flags
+        self.regs.set_z(result == 0);
+        self.regs.set_n(false);
+        self.regs.set_h(((reg_a & 0x0F) + (n & 0x0F)) > 0x0F);
+        self.regs.set_c((reg_a as u16 + n as u16) > 0xFF);
+
+        8
     }
 
     fn call_a16(&mut self, bus: &mut Bus) -> u8 {

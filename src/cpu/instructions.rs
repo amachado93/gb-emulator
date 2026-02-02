@@ -3,13 +3,19 @@ use core::panic;
 #[derive(Debug)]
 pub enum Instruction {
     NOP,
-    LDBCD16,  // LD BC, d16
-    LDBCA,    // LD (BC), A
-    INCBC,    // INC BC
-    JRNZR8,   // JR NZ, r8
-    INCHL,    // INC HL
-    JRZR8,    // JR Z, r8
+    LDBCD16, // LD BC, d16
+    LDBCA,   // LD (BC), A
+    INCBC,   // INC BC
+    DECB,
+    LDDED16,
+    INCDE,
+    JRNZR8, // JR NZ, r8
+    INCHL,  // INC HL
+    INCH,
+    JRZR8, // JR Z, r8
+    LDADE,
     LDAHLINC, // LD A, (HL+)
+    INCL,
     ADD(ArithmeticTarget),
     ORC, // OR C
     LDIMM8(Register8),
@@ -17,9 +23,17 @@ pub enum Instruction {
     LDA16A,    // LD (a16), A
     LDAA16,    // LD A, (a16)
     LDHLD16,   // LD HL, d16
+    LDHLPOSA,  // LD (HL+), A
     JRR8,      // JR r8
     JPA16,     // JP a16
     CALLNZA16, // CALL NZ, a16
+    XORB,
+    XORC,
+    XORD,
+    XORE,
+    XORH,
+    XORL,
+    XORA,
     POPBC,
     CALLA16, // CALL a16
     RET,
@@ -28,6 +42,7 @@ pub enum Instruction {
     DI,
     LDSPD16,
     PUSHBC,
+    ADDAD8,
     POPHL,
     PUSHHL,
     ANDD8,
@@ -71,12 +86,20 @@ pub fn decode(opcode: u8) -> Instruction {
         0x01 => Instruction::LDBCD16,
         0x02 => Instruction::LDBCA,
         0x03 => Instruction::INCBC,
+        0x05 => Instruction::DECB,
+
+        0x11 => Instruction::LDDED16,
+        0x13 => Instruction::INCDE,
+        0x1A => Instruction::LDADE,
 
         0x20 => Instruction::JRNZR8,
         0x21 => Instruction::LDHLD16,
+        0x22 => Instruction::LDHLPOSA,
         0x23 => Instruction::INCHL,
+        0x24 => Instruction::INCH,
         0x28 => Instruction::JRZR8,
         0x2A => Instruction::LDAHLINC,
+        0x2C => Instruction::INCL,
 
         0xB1 => Instruction::ORC,
         // CP r (0xB8-0xBF)
@@ -128,10 +151,19 @@ pub fn decode(opcode: u8) -> Instruction {
         // JR r8
         0x18 => Instruction::JRR8,
 
+        0xA8 => Instruction::XORB,
+        0xA9 => Instruction::XORC,
+        0xAA => Instruction::XORD,
+        0xAB => Instruction::XORE,
+        0xAC => Instruction::XORH,
+        0xAD => Instruction::XORL,
+        0xAF => Instruction::XORA,
+
         0xC1 => Instruction::POPBC,
         0xC3 => Instruction::JPA16,
         0xC4 => Instruction::CALLNZA16,
         0xC5 => Instruction::PUSHBC,
+        0xC6 => Instruction::ADDAD8,
 
         // CALLA16
         0xCD => Instruction::CALLA16,
