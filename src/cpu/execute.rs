@@ -31,7 +31,6 @@ impl Cpu {
             Instruction::LDAHLINC => self.ld_a_hlinc(bus),
             Instruction::INCL => self.inc_c(),
             Instruction::ADD(target) => self.add(target),
-            Instruction::ORC => self.or_c(),
             Instruction::LDIMM8(reg) => self.ld_imm8(reg, bus),
             Instruction::LDHLD16 => self.ld_hl_d16(bus),
             Instruction::LDHLPOSA => self.ld_hlpos_a(bus),
@@ -41,6 +40,7 @@ impl Cpu {
             Instruction::JRR8 => self.jr_r8(bus),
             Instruction::LDRegReg(dst, src) => self.ld_reg_reg(dst, src, bus),
             Instruction::LDSPD16 => self.ld_sp_d16(bus),
+            Instruction::LDHLNEGA => self.ld_hlneg_a(bus),
             Instruction::CP(reg) => self.cp(reg, bus),
             Instruction::XORB => self.xor_b(),
             Instruction::XORC => self.xor_c(),
@@ -49,11 +49,20 @@ impl Cpu {
             Instruction::XORH => self.xor_h(),
             Instruction::XORL => self.xor_l(),
             Instruction::XORA => self.xor_a(),
+            Instruction::ORB => self.or_b(),
+            Instruction::ORC => self.or_c(),
+            Instruction::ORD => self.or_d(),
+            Instruction::ORE => self.or_e(),
+            Instruction::ORH => self.or_h(),
+            Instruction::ORL => self.or_l(),
+            Instruction::ORHL => self.or_hl(bus),
+            Instruction::ORA => self.or_a(),
             Instruction::POPBC => self.pop_bc(bus),
             Instruction::JPA16 => self.jp_a16(bus),
             Instruction::CALLNZA16 => self.call_nz_a16(bus),
             Instruction::PUSHBC => self.push_bc(bus),
             Instruction::ADDAD8 => self.add_a_d8(bus),
+            Instruction::SUBD8 => self.sub_d8(bus),
             Instruction::CALLA16 => self.call_a16(bus),
             Instruction::RET => self.ret(bus),
             Instruction::PUSHHL => self.push_hl(bus),
@@ -241,13 +250,106 @@ impl Cpu {
         4 // we return the number of cycles
     }
 
+    fn or_b(&mut self) -> u8 {
+        let result = self.regs.a | self.regs.b;
+        self.regs.a = result;
+
+        // flags are set after bitwise OR operation
+        self.regs.set_z(result == 0);
+        self.regs.set_n(false); // make sure n, h, and c are cleared
+        self.regs.set_h(false);
+        self.regs.set_c(false);
+
+        4
+    }
+
     fn or_c(&mut self) -> u8 {
         let result = self.regs.a | self.regs.c;
         self.regs.a = result;
 
         // flags are set after bitwise OR operation
         self.regs.set_z(result == 0);
-        self.regs.set_n(false); // make sure n, h, and c are cleared
+        self.regs.set_n(false);
+        self.regs.set_h(false);
+        self.regs.set_c(false);
+
+        4
+    }
+
+    fn or_d(&mut self) -> u8 {
+        let result = self.regs.a | self.regs.d;
+        self.regs.a = result;
+
+        // flags are set after bitwise OR operation
+        self.regs.set_z(result == 0);
+        self.regs.set_n(false);
+        self.regs.set_h(false);
+        self.regs.set_c(false);
+
+        4
+    }
+
+    fn or_e(&mut self) -> u8 {
+        let result = self.regs.a | self.regs.e;
+        self.regs.a = result;
+
+        // flags are set after bitwise OR operation
+        self.regs.set_z(result == 0);
+        self.regs.set_n(false);
+        self.regs.set_h(false);
+        self.regs.set_c(false);
+
+        4
+    }
+
+    fn or_h(&mut self) -> u8 {
+        let result = self.regs.a | self.regs.h;
+        self.regs.a = result;
+
+        // flags are set after bitwise OR operation
+        self.regs.set_z(result == 0);
+        self.regs.set_n(false);
+        self.regs.set_h(false);
+        self.regs.set_c(false);
+
+        4
+    }
+
+    fn or_l(&mut self) -> u8 {
+        let result = self.regs.a | self.regs.l;
+        self.regs.a = result;
+
+        // flags are set after bitwise OR operation
+        self.regs.set_z(result == 0);
+        self.regs.set_n(false);
+        self.regs.set_h(false);
+        self.regs.set_c(false);
+
+        4
+    }
+
+    fn or_hl(&mut self, bus: &mut Bus) -> u8 {
+        let data = bus.read8(self.regs.get_hl());
+        let result = self.regs.a | data;
+
+        self.regs.a = result;
+
+        // flags
+        self.regs.set_z(result == 0);
+        self.regs.set_n(false);
+        self.regs.set_h(false);
+        self.regs.set_c(false);
+
+        8
+    }
+
+    fn or_a(&mut self) -> u8 {
+        let result = self.regs.a | self.regs.a;
+        self.regs.a = result;
+
+        // flags
+        self.regs.set_z(result == 0);
+        self.regs.set_n(false);
         self.regs.set_h(false);
         self.regs.set_c(false);
 
@@ -320,6 +422,15 @@ impl Cpu {
         bus.write8(hl, self.regs.a);
 
         self.regs.set_hl(hl.wrapping_add(1));
+
+        8
+    }
+
+    fn ld_hlneg_a(&mut self, bus: &mut Bus) -> u8 {
+        let hl = self.regs.get_hl();
+        bus.write8(hl, self.regs.a);
+
+        self.regs.set_hl(hl.wrapping_sub(1));
 
         8
     }
@@ -593,6 +704,22 @@ impl Cpu {
         self.regs.set_n(false);
         self.regs.set_h(((reg_a & 0x0F) + (n & 0x0F)) > 0x0F);
         self.regs.set_c((reg_a as u16 + n as u16) > 0xFF);
+
+        8
+    }
+
+    fn sub_d8(&mut self, bus: &mut Bus) -> u8 {
+        let a = self.regs.a;
+        let n = bus.read8(self.regs.pc);
+        self.regs.pc = self.regs.pc.wrapping_add(1);
+
+        let result = a.wrapping_sub(n);
+
+        // flags
+        self.regs.set_z(result == 0);
+        self.regs.set_n(true);
+        self.regs.set_h((a & 0x0F) < (n & 0x0F));
+        self.regs.set_c((a & 0xFF) < (n & 0xFF));
 
         8
     }

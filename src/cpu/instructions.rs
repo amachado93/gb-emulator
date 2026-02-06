@@ -17,13 +17,13 @@ pub enum Instruction {
     LDAHLINC, // LD A, (HL+)
     INCL,
     ADD(ArithmeticTarget),
-    ORC, // OR C
     LDIMM8(Register8),
     LDA8A,     // LD (a8), A
     LDA16A,    // LD (a16), A
     LDAA16,    // LD A, (a16)
     LDHLD16,   // LD HL, d16
     LDHLPOSA,  // LD (HL+), A
+    LDHLNEGA,  // LD (HL-), A
     JRR8,      // JR r8
     JPA16,     // JP a16
     CALLNZA16, // CALL NZ, a16
@@ -38,11 +38,20 @@ pub enum Instruction {
     CALLA16, // CALL a16
     RET,
     LDRegReg(Operand8, Operand8),
+    ORB,
+    ORC,
+    ORD,
+    ORE,
+    ORH,
+    ORL,
+    ORHL,
+    ORA,
     CP(Operand8),
     DI,
     LDSPD16,
     PUSHBC,
     ADDAD8,
+    SUBD8,
     POPHL,
     PUSHHL,
     ANDD8,
@@ -101,7 +110,6 @@ pub fn decode(opcode: u8) -> Instruction {
         0x2A => Instruction::LDAHLINC,
         0x2C => Instruction::INCL,
 
-        0xB1 => Instruction::ORC,
         // CP r (0xB8-0xBF)
         0xB8..=0xBF => {
             let reg = decode_reg(opcode & 0b111);
@@ -110,6 +118,7 @@ pub fn decode(opcode: u8) -> Instruction {
 
         // LD SP, d16
         0x31 => Instruction::LDSPD16,
+        0x32 => Instruction::LDHLNEGA,
 
         // LD r, r (0x40-0x7F, except 0x76)
         0x40..=0x7F if opcode != 0x76 => {
@@ -159,16 +168,26 @@ pub fn decode(opcode: u8) -> Instruction {
         0xAD => Instruction::XORL,
         0xAF => Instruction::XORA,
 
+        0xB0 => Instruction::ORB,
+        0xB1 => Instruction::ORC,
+        0xB3 => Instruction::ORD,
+        0xB2 => Instruction::ORE,
+        0xB4 => Instruction::ORH,
+        0xB5 => Instruction::ORL,
+        0xB6 => Instruction::ORHL,
+        0xB7 => Instruction::ORA,
+
         0xC1 => Instruction::POPBC,
         0xC3 => Instruction::JPA16,
         0xC4 => Instruction::CALLNZA16,
         0xC5 => Instruction::PUSHBC,
         0xC6 => Instruction::ADDAD8,
 
+        0xC9 => Instruction::RET,
         // CALLA16
         0xCD => Instruction::CALLA16,
 
-        0xC9 => Instruction::RET,
+        0xD6 => Instruction::SUBD8,
 
         // POP HL
         0xE1 => Instruction::POPHL,
