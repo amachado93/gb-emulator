@@ -29,7 +29,8 @@ impl Cpu {
             Instruction::JRZR8 => self.jr_z_r8(bus),
             Instruction::JRNZR8 => self.jr_nz_r8(bus),
             Instruction::LDAHLINC => self.ld_a_hlinc(bus),
-            Instruction::INCL => self.inc_c(),
+            Instruction::INCL => self.inc_l(),
+            Instruction::DECL => self.dec_l(),
             Instruction::ADD(target) => self.add(target),
             Instruction::LDIMM8(reg) => self.ld_imm8(reg, bus),
             Instruction::LDHLD16 => self.ld_hl_d16(bus),
@@ -48,6 +49,7 @@ impl Cpu {
             Instruction::XORE => self.xor_e(),
             Instruction::XORH => self.xor_h(),
             Instruction::XORL => self.xor_l(),
+            Instruction::XORHL => self.xor_hl(bus),
             Instruction::XORA => self.xor_a(),
             Instruction::ORB => self.or_b(),
             Instruction::ORC => self.or_c(),
@@ -62,8 +64,10 @@ impl Cpu {
             Instruction::CALLNZA16 => self.call_nz_a16(bus),
             Instruction::PUSHBC => self.push_bc(bus),
             Instruction::ADDAD8 => self.add_a_d8(bus),
+            Instruction::PUSHDE => self.push_de(bus),
             Instruction::SUBD8 => self.sub_d8(bus),
             Instruction::CALLA16 => self.call_a16(bus),
+            Instruction::PREFIXCB => self.prefix_cb(bus),
             Instruction::RET => self.ret(bus),
             Instruction::PUSHHL => self.push_hl(bus),
             Instruction::ANDD8 => self.and_d8(bus),
@@ -212,7 +216,7 @@ impl Cpu {
         8
     }
 
-    fn inc_c(&mut self) -> u8 {
+    fn inc_l(&mut self) -> u8 {
         let orig_val = self.regs.c;
         let result = self.regs.c.wrapping_add(1);
         self.regs.c = result;
@@ -221,6 +225,20 @@ impl Cpu {
         self.regs.set_z(result == 0);
         self.regs.set_n(false);
         self.regs.set_h((orig_val & 0x0F) == 0x0F);
+
+        4
+    }
+
+    fn dec_l(&mut self) -> u8 {
+        let l = self.regs.l;
+        let result = self.regs.l.wrapping_sub(1);
+
+        self.regs.l = result;
+
+        // flags
+        self.regs.set_z(result == 0);
+        self.regs.set_n(true);
+        self.regs.set_h((l & 0x0F) == 0x0F);
 
         4
     }
@@ -604,6 +622,21 @@ impl Cpu {
         4
     }
 
+    fn xor_hl(&mut self, bus: &mut Bus) -> u8 {
+        let data = bus.read8(self.regs.get_hl());
+        let result = self.regs.a ^ data;
+
+        self.regs.a = result;
+
+        // flags
+        self.regs.set_z(result == 0);
+        self.regs.set_n(false);
+        self.regs.set_h(false);
+        self.regs.set_c(false);
+
+        8
+    }
+
     fn xor_a(&mut self) -> u8 {
         let result = self.regs.a ^ self.regs.a;
         self.regs.a = result;
@@ -708,12 +741,28 @@ impl Cpu {
         8
     }
 
+    fn push_de(&mut self, bus: &mut Bus) -> u8 {
+        let d = self.regs.d;
+        let e = self.regs.e;
+
+        // push high byte first
+        self.regs.sp = self.regs.sp.wrapping_sub(1);
+        bus.write8(self.regs.sp, d);
+
+        // then low
+        self.regs.sp = self.regs.sp.wrapping_sub(1);
+        bus.write8(self.regs.sp, e);
+
+        16
+    }
+
     fn sub_d8(&mut self, bus: &mut Bus) -> u8 {
         let a = self.regs.a;
         let n = bus.read8(self.regs.pc);
         self.regs.pc = self.regs.pc.wrapping_add(1);
 
         let result = a.wrapping_sub(n);
+        self.regs.a = result;
 
         // flags
         self.regs.set_z(result == 0);
@@ -795,6 +844,23 @@ impl Cpu {
         bus.write8(self.regs.sp, l);
 
         16
+    }
+
+    fn prefix_cb(&mut self, bus: &mut Bus) -> u8 {
+        let opcode = bus.read8(self.regs.pc);
+        self.regs.pc = self.regs.pc.wrapping_add(1);
+
+        let x = (opcode & 0b11000000) >> 6;
+        let y = (opcode & 0b00111000) >> 3;
+        let z = opcode & 0b00000111;
+
+        match x {
+            0 => self.cb_rot_shift(y, z, bus),
+            1 => self.cb_bit(y, z, bus),
+            2 => self.cb_res(y, z, bus),
+            3 => self.cb_set(y, z, bus),
+            _ => unreachable!(),
+        }
     }
 
     fn ret(&mut self, bus: &mut Bus) -> u8 {

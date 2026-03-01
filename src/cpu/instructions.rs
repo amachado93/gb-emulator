@@ -16,6 +16,7 @@ pub enum Instruction {
     LDADE,
     LDAHLINC, // LD A, (HL+)
     INCL,
+    DECL,
     ADD(ArithmeticTarget),
     LDIMM8(Register8),
     LDA8A,     // LD (a8), A
@@ -33,6 +34,7 @@ pub enum Instruction {
     XORE,
     XORH,
     XORL,
+    XORHL,
     XORA,
     POPBC,
     CALLA16, // CALL a16
@@ -50,6 +52,8 @@ pub enum Instruction {
     DI,
     LDSPD16,
     PUSHBC,
+    PREFIXCB,
+    PUSHDE,
     ADDAD8,
     SUBD8,
     POPHL,
@@ -109,6 +113,7 @@ pub fn decode(opcode: u8) -> Instruction {
         0x28 => Instruction::JRZR8,
         0x2A => Instruction::LDAHLINC,
         0x2C => Instruction::INCL,
+        0x2D => Instruction::DECL,
 
         // CP r (0xB8-0xBF)
         0xB8..=0xBF => {
@@ -166,6 +171,7 @@ pub fn decode(opcode: u8) -> Instruction {
         0xAB => Instruction::XORE,
         0xAC => Instruction::XORH,
         0xAD => Instruction::XORL,
+        0xAE => Instruction::XORHL,
         0xAF => Instruction::XORA,
 
         0xB0 => Instruction::ORB,
@@ -184,9 +190,12 @@ pub fn decode(opcode: u8) -> Instruction {
         0xC6 => Instruction::ADDAD8,
 
         0xC9 => Instruction::RET,
+        0xCB => Instruction::PREFIXCB,
+
         // CALLA16
         0xCD => Instruction::CALLA16,
 
+        0xD5 => Instruction::PUSHDE,
         0xD6 => Instruction::SUBD8,
 
         // POP HL
