@@ -949,15 +949,54 @@ impl Cpu {
     fn cb_rot_shift(&mut self, y: u8, z: u8, bus: &mut Bus) -> u8 {
         match y {
             4 => self.sla(z, bus),
+            5 => self.sra(z, bus),
+            6 => self.swap(z, bus),
             7 => self.srl(z, bus),
             _ => todo!("Other rotate/shift function not implemented"),
         }
     }
 
+    fn sra(&mut self, z: u8, bus: &mut Bus) -> u8 {
+        let value = self.cb_read_target(z, bus);
+
+        let carry = value & 0x01;
+        let msb = value & 0x80;
+        let result = (value >> 1) | msb;
+
+        self.cb_write_target(z, bus, result);
+
+        // flags
+        self.regs.set_z(result == 0);
+        self.regs.set_n(false);
+        self.regs.set_h(false);
+        self.regs.set_c(carry != 0);
+
+        if z == 6 { 16 } else { 8 }
+    }
+
+    fn swap(&mut self, z: u8, bus: &mut Bus) -> u8 {
+        let value = self.cb_read_target(z, bus);
+
+        let upper = value & 0xF0;
+        let lower = value & 0x0F;
+
+        let result = (lower << 4) | (upper >> 4);
+
+        self.cb_write_target(z, bus, result);
+
+        // flags
+        self.regs.set_z(result == 0);
+        self.regs.set_n(false);
+        self.regs.set_h(false);
+        self.regs.set_c(false);
+
+        if z == 6 { 16 } else { 8 }
+    }
+
     fn sla(&mut self, z: u8, bus: &mut Bus) -> u8 {
         let value = self.cb_read_target(z, bus);
 
-        let carry = value & 0x00;
+        let carry = value & 0x80;
         let result = value << 1;
 
         // write back
