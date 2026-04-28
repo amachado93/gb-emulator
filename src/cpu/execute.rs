@@ -944,4 +944,110 @@ impl Cpu {
 
         8
     }
+
+    // === CB functions === //
+    fn cb_rot_shift(&mut self, y: u8, z: u8, bus: &mut Bus) -> u8 {
+        match y {
+            4 => self.sla(z, bus),
+            7 => self.srl(z, bus),
+            _ => todo!("Other rotate/shift function not implemented"),
+        }
+    }
+
+    fn sla(&mut self, z: u8, bus: &mut Bus) -> u8 {
+        let value = self.cb_read_target(z, bus);
+
+        let carry = value & 0x00;
+        let result = value << 1;
+
+        // write back
+        self.cb_write_target(z, bus, result);
+
+        // flags
+        self.regs.set_z(result == 0);
+        self.regs.set_n(false);
+        self.regs.set_h(false);
+        self.regs.set_c(carry != 0);
+
+        if z == 6 { 16 } else { 8 }
+    }
+
+    fn srl(&mut self, z: u8, bus: &mut Bus) -> u8 {
+        let value = self.cb_read_target(z, bus);
+
+        let carry = value & 0x01;
+        let result = value >> 1;
+
+        // write back
+        self.cb_write_target(z, bus, result);
+
+        // flags
+        self.regs.set_z(result == 0);
+        self.regs.set_n(false);
+        self.regs.set_h(false);
+        self.regs.set_c(carry != 0);
+
+        if z == 6 { 16 } else { 8 }
+    }
+
+    // CB Table Helpers
+    fn cb_read_target(&self, z: u8, bus: &Bus) -> u8 {
+        match z {
+            0 => self.regs.b,
+            1 => self.regs.c,
+            2 => self.regs.d,
+            3 => self.regs.e,
+            4 => self.regs.h,
+            5 => self.regs.l,
+            6 => bus.read8(self.regs.get_hl()),
+            7 => self.regs.a,
+            _ => unreachable!(),
+        }
+    }
+
+    fn cb_write_target(&mut self, z: u8, bus: &mut Bus, result: u8) {
+        match z {
+            0 => self.regs.b = result,
+            1 => self.regs.c = result,
+            2 => self.regs.d = result,
+            3 => self.regs.e = result,
+            4 => self.regs.h = result,
+            5 => self.regs.l = result,
+            6 => bus.write8(self.regs.get_hl(), result),
+            7 => self.regs.a = result,
+            _ => unreachable!(),
+        }
+    }
+
+    fn cb_bit(&mut self, y: u8, z: u8, bus: &mut Bus) -> u8 {
+        let value = self.cb_read_target(z, bus);
+        let mask = 1 << y;
+
+        self.regs.set_z(value & mask == 0);
+        self.regs.set_n(false);
+        self.regs.set_h(true);
+        // carry is unchanged
+
+        if z == 6 { 12 } else { 8 }
+    }
+
+    fn cb_res(&mut self, y: u8, z: u8, bus: &mut Bus) -> u8 {
+        let value = self.cb_read_target(z, bus);
+        let result = value & !(1 << y);
+
+        self.cb_write_target(z, bus, result);
+
+        // flags unchanged
+        if z == 6 { 16 } else { 8 }
+    }
+
+    fn cb_set(&mut self, y: u8, z: u8, bus: &mut Bus) -> u8 {
+        let value = self.cb_read_target(z, bus);
+        let result = value | (1 << y);
+
+        self.cb_write_target(z, bus, result);
+
+        // flags unchanged
+        if z == 6 { 16 } else { 8 }
+    }
 }
