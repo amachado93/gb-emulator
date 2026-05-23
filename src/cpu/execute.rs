@@ -24,6 +24,7 @@ impl Cpu {
             Instruction::INCHL => self.inc_hl(),
             Instruction::INCH => self.inc_h(),
             Instruction::LDDED16 => self.ld_de_d16(bus),
+            Instruction::LDDEA => self.ld_de_a(bus),
             Instruction::INCDE => self.inc_de(),
             Instruction::LDADE => self.ld_a_de(bus),
             Instruction::JRZR8 => self.jr_z_r8(bus),
@@ -161,6 +162,15 @@ impl Cpu {
         self.regs.set_de(value);
 
         12
+    }
+
+    fn ld_de_a(&mut self, bus: &mut Bus) -> u8 {
+        let a = self.regs.a;
+        let addr = self.regs.get_de();
+
+        bus.write8(addr, a);
+
+        8
     }
 
     fn inc_de(&mut self) -> u8 {
@@ -948,6 +958,9 @@ impl Cpu {
     // === CB functions === //
     fn cb_rot_shift(&mut self, y: u8, z: u8, bus: &mut Bus) -> u8 {
         match y {
+            0 => self.rlc(z, bus),
+            1 => self.rrc(z, bus),
+            2 => self.rl(z, bus),
             3 => self.rr(z, bus),
             4 => self.sla(z, bus),
             5 => self.sra(z, bus),
@@ -955,6 +968,64 @@ impl Cpu {
             7 => self.srl(z, bus),
             _ => todo!("Other rotate/shift function not implemented"),
         }
+    }
+
+    fn rlc(&mut self, z: u8, bus: &mut Bus) -> u8 {
+        // rotate read target to left
+        let value = self.cb_read_target(z, bus);
+
+        let msb = value & 0x80;
+        let lsb = if msb == 0x80 { 0x01 } else { 0x00 };
+        let result = (value << 1) | lsb;
+
+        self.cb_write_target(z, bus, result);
+
+        // flags
+        self.regs.set_z(result == 0);
+        self.regs.set_n(false);
+        self.regs.set_h(false);
+        self.regs.set_c(msb != 0);
+
+        if z == 6 { 16 } else { 8 }
+    }
+
+    fn rrc(&mut self, z: u8, bus: &mut Bus) -> u8 {
+        let value = self.cb_read_target(z, bus);
+
+        let lsb = value & 0x01;
+        let msb = if lsb == 0x01 { 0x80 } else { 0x00 };
+        let result = (value >> 1) | msb;
+
+        self.cb_write_target(z, bus, result);
+
+        // flags
+        self.regs.set_z(result == 0);
+        self.regs.set_n(false);
+        self.regs.set_h(false);
+        self.regs.set_c(lsb != 0);
+
+        if z == 6 { 16 } else { 8 }
+    }
+
+    fn rl(&mut self, z: u8, bus: &mut Bus) -> u8 {
+        // old carry into bit 0, old bit 7 into carry
+        let value = self.cb_read_target(z, bus);
+
+        let old_c = self.regs.get_c();
+        let msb = value & 0x80;
+        let lsb = if old_c { 0x01 } else { 0x00 };
+
+        let result = (value << 1) | lsb;
+
+        self.cb_write_target(z, bus, result);
+
+        // flags
+        self.regs.set_z(result == 0);
+        self.regs.set_n(false);
+        self.regs.set_h(false);
+        self.regs.set_c(msb != 0);
+
+        if z == 6 { 16 } else { 8 }
     }
 
     fn rr(&mut self, z: u8, bus: &mut Bus) -> u8 {

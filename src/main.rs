@@ -19,7 +19,7 @@ fn main() {
     let mut cpu = Cpu::new();
     let mut bus = Bus::new();
 
-    load_rom(&mut bus, "roms/cpu_instrs/cpu_instrs.gb");
+    load_rom(&mut bus, "roms/cpu_instrs/individual/10-bit ops.gb");
     cpu.reset();
 
     let mut cycles = 0;
