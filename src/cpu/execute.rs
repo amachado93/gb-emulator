@@ -219,7 +219,7 @@ impl Cpu {
     fn inc_l(&mut self) -> u8 {
         let orig_val = self.regs.c;
         let result = self.regs.c.wrapping_add(1);
-        self.regs.c = result;
+        self.regs.l = result;
 
         // flags
         self.regs.set_z(result == 0);
@@ -948,12 +948,34 @@ impl Cpu {
     // === CB functions === //
     fn cb_rot_shift(&mut self, y: u8, z: u8, bus: &mut Bus) -> u8 {
         match y {
+            3 => self.rr(z, bus),
             4 => self.sla(z, bus),
             5 => self.sra(z, bus),
             6 => self.swap(z, bus),
             7 => self.srl(z, bus),
             _ => todo!("Other rotate/shift function not implemented"),
         }
+    }
+
+    fn rr(&mut self, z: u8, bus: &mut Bus) -> u8 {
+        // bit 0 goes into C flag, old C flag goes into new bit 7, bits 7..1 shift right
+        let value = self.cb_read_target(z, bus);
+
+        let lsb = value & 0x01;
+        let old_c = self.regs.get_c();
+        let msb = if old_c { 0x80 } else { 0x00 };
+
+        let result = (value >> 1) | msb;
+
+        self.cb_write_target(z, bus, result);
+
+        //flags
+        self.regs.set_z(result == 0);
+        self.regs.set_n(false);
+        self.regs.set_h(false);
+        self.regs.set_c(lsb != 0);
+
+        if z == 6 { 16 } else { 8 }
     }
 
     fn sra(&mut self, z: u8, bus: &mut Bus) -> u8 {
