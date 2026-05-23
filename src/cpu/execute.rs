@@ -25,6 +25,7 @@ impl Cpu {
             Instruction::INCH => self.inc_h(),
             Instruction::LDDED16 => self.ld_de_d16(bus),
             Instruction::LDDEA => self.ld_de_a(bus),
+            Instruction::INCE => self.inc_e(),
             Instruction::INCDE => self.inc_de(),
             Instruction::LDADE => self.ld_a_de(bus),
             Instruction::JRZR8 => self.jr_z_r8(bus),
@@ -171,6 +172,21 @@ impl Cpu {
         bus.write8(addr, a);
 
         8
+    }
+
+    fn inc_e(&mut self) -> u8 {
+        let e = self.regs.e;
+        let low_nibble = e & 0x0F;
+        let result = e.wrapping_add(1);
+
+        self.regs.e = result;
+
+        // flags
+        self.regs.set_z(result == 0);
+        self.regs.set_n(false);
+        self.regs.set_h(low_nibble == 0x0F);
+
+        4
     }
 
     fn inc_de(&mut self) -> u8 {
