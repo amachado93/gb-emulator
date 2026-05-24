@@ -22,15 +22,18 @@ impl Cpu {
             Instruction::INCBC => self.inc_bc(),
             Instruction::DECB => self.dec_b(),
             Instruction::DECC => self.dec_c(),
+            Instruction::DECH => self.dec_h(),
             Instruction::INCHL => self.inc_hl(),
             Instruction::INCH => self.inc_h(),
             Instruction::LDDED16 => self.ld_de_d16(bus),
             Instruction::LDDEA => self.ld_de_a(bus),
-            Instruction::INCE => self.inc_e(),
             Instruction::INCD => self.inc_d(),
+            Instruction::INCE => self.inc_e(),
+            Instruction::RRA => self.rra(),
             Instruction::INCDE => self.inc_de(),
             Instruction::LDADE => self.ld_a_de(bus),
             Instruction::JRZR8 => self.jr_z_r8(bus),
+            Instruction::JRNCR8 => self.jr_nc_r8(bus),
             Instruction::JRNZR8 => self.jr_nz_r8(bus),
             Instruction::LDAHLINC => self.ld_a_hlinc(bus),
             Instruction::INCL => self.inc_l(),
@@ -66,6 +69,7 @@ impl Cpu {
             Instruction::POPBC => self.pop_bc(bus),
             Instruction::JPA16 => self.jp_a16(bus),
             Instruction::CALLNZA16 => self.call_nz_a16(bus),
+            Instruction::POPDE => self.pop_de(bus),
             Instruction::PUSHBC => self.push_bc(bus),
             Instruction::ADDAD8 => self.add_a_d8(bus),
             Instruction::PUSHDE => self.push_de(bus),
@@ -80,6 +84,7 @@ impl Cpu {
             Instruction::LDHAA8 => self.ldh_a_a8(bus),
             Instruction::POPAF => self.pop_af(bus),
             Instruction::PUSHAF => self.push_af(bus),
+            Instruction::XORD8 => self.xor_d8(bus),
             Instruction::CPD8 => self.cp_d8(bus),
         }
     }
@@ -140,6 +145,20 @@ impl Cpu {
         self.regs.set_z(result == 0);
         self.regs.set_n(true);
         self.regs.set_h((c & 0x0F) == 0x00);
+
+        4
+    }
+
+    fn dec_h(&mut self) -> u8 {
+        let h = self.regs.h;
+        let result = h.wrapping_sub(1);
+
+        self.regs.h = result;
+
+        //flags
+        self.regs.set_z(result == 0);
+        self.regs.set_n(true);
+        self.regs.set_h((h & 0x0F) == 0x00);
 
         4
     }
@@ -205,6 +224,26 @@ impl Cpu {
         4
     }
 
+    fn rra(&mut self) -> u8 {
+        let a = self.regs.a;
+        let old_c = self.regs.get_c();
+        let mut result = a >> 1;
+
+        if old_c {
+            result = result | 0x80
+        }
+
+        self.regs.a = result;
+
+        // flags
+        self.regs.set_z(false);
+        self.regs.set_n(false);
+        self.regs.set_h(false);
+        self.regs.set_c((a & 0x01) == 1);
+
+        4
+    }
+
     fn inc_d(&mut self) -> u8 {
         let d = self.regs.d;
         let low_nibble = d & 0x0F;
@@ -245,6 +284,19 @@ impl Cpu {
             // PC is already pointing to the next instruction
             self.regs.pc = self.regs.pc.wrapping_add(offset as u16);
 
+            12
+        } else {
+            8
+        }
+    }
+
+    fn jr_nc_r8(&mut self, bus: &mut Bus) -> u8 {
+        let offset = bus.read8(self.regs.pc) as i8;
+        self.regs.pc = self.regs.pc.wrapping_add(1);
+
+        // check carry flag
+        if !self.regs.get_c() {
+            self.regs.pc = self.regs.pc.wrapping_add(offset as u16);
             12
         } else {
             8
@@ -766,6 +818,19 @@ impl Cpu {
         }
     }
 
+    fn pop_de(&mut self, bus: &mut Bus) -> u8 {
+        let lsb = bus.read8(self.regs.sp);
+        self.regs.sp = self.regs.sp.wrapping_add(1);
+
+        let msb = bus.read8(self.regs.sp);
+        self.regs.sp = self.regs.sp.wrapping_add(1);
+
+        let result = ((msb as u16) << 8) | (lsb as u16);
+        self.regs.set_de(result);
+
+        12
+    }
+
     fn push_bc(&mut self, bus: &mut Bus) -> u8 {
         let b = self.regs.b;
         let c = self.regs.c;
@@ -984,6 +1049,24 @@ impl Cpu {
         bus.write8(self.regs.sp, cleared_f);
 
         16
+    }
+
+    fn xor_d8(&mut self, bus: &mut Bus) -> u8 {
+        let d8 = bus.read8(self.regs.pc);
+        self.regs.pc = self.regs.pc.wrapping_add(1);
+
+        let a = self.regs.a;
+        let result = a ^ d8;
+
+        self.regs.a = result;
+
+        //flags
+        self.regs.set_z(result == 0);
+        self.regs.set_n(false);
+        self.regs.set_h(false);
+        self.regs.set_c(false);
+
+        8
     }
 
     fn cp_d8(&mut self, bus: &mut Bus) -> u8 {
