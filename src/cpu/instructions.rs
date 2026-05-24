@@ -7,8 +7,10 @@ pub enum Instruction {
     LDBCA,   // LD (BC), A
     INCBC,   // INC BC
     DECB,
+    DECC,
     LDDED16,
     LDDEA,
+    INCD,
     INCE,
     INCDE,
     JRNZR8, // JR NZ, r8
@@ -102,11 +104,13 @@ pub fn decode(opcode: u8) -> Instruction {
         0x02 => Instruction::LDBCA,
         0x03 => Instruction::INCBC,
         0x05 => Instruction::DECB,
+        0x0D => Instruction::DECC,
 
         0x11 => Instruction::LDDED16,
         0x12 => Instruction::LDDEA,
         0x13 => Instruction::INCDE,
         0x1A => Instruction::LDADE,
+        0x14 => Instruction::INCD,
         0x1C => Instruction::INCE,
 
         0x20 => Instruction::JRNZR8,

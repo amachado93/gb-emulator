@@ -21,11 +21,13 @@ impl Cpu {
             Instruction::LDBCA => self.ld_bc_a(bus),
             Instruction::INCBC => self.inc_bc(),
             Instruction::DECB => self.dec_b(),
+            Instruction::DECC => self.dec_c(),
             Instruction::INCHL => self.inc_hl(),
             Instruction::INCH => self.inc_h(),
             Instruction::LDDED16 => self.ld_de_d16(bus),
             Instruction::LDDEA => self.ld_de_a(bus),
             Instruction::INCE => self.inc_e(),
+            Instruction::INCD => self.inc_d(),
             Instruction::INCDE => self.inc_de(),
             Instruction::LDADE => self.ld_a_de(bus),
             Instruction::JRZR8 => self.jr_z_r8(bus),
@@ -123,7 +125,21 @@ impl Cpu {
         // flags
         self.regs.set_z(result == 0);
         self.regs.set_n(true);
-        self.regs.set_h((orig_val & 0x0F) == 0x0F);
+        self.regs.set_h((orig_val & 0x0F) == 0x00);
+
+        4
+    }
+
+    fn dec_c(&mut self) -> u8 {
+        let c = self.regs.c;
+        let result = c.wrapping_sub(1);
+
+        self.regs.c = result;
+
+        // flags
+        self.regs.set_z(result == 0);
+        self.regs.set_n(true);
+        self.regs.set_h((c & 0x0F) == 0x00);
 
         4
     }
@@ -189,6 +205,21 @@ impl Cpu {
         4
     }
 
+    fn inc_d(&mut self) -> u8 {
+        let d = self.regs.d;
+        let low_nibble = d & 0x0F;
+        let result = d.wrapping_add(1);
+
+        self.regs.d = result;
+
+        // flags
+        self.regs.set_z(result == 0);
+        self.regs.set_n(false);
+        self.regs.set_h(low_nibble == 0x0F);
+
+        4
+    }
+
     fn inc_de(&mut self) -> u8 {
         let data = self.regs.get_de();
         let result = data.wrapping_add(1);
@@ -243,8 +274,8 @@ impl Cpu {
     }
 
     fn inc_l(&mut self) -> u8 {
-        let orig_val = self.regs.c;
-        let result = self.regs.c.wrapping_add(1);
+        let orig_val = self.regs.l;
+        let result = self.regs.l.wrapping_add(1);
         self.regs.l = result;
 
         // flags
