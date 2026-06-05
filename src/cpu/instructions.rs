@@ -61,6 +61,7 @@ pub enum Instruction {
     LDSPD16,
     PUSHBC,
     PREFIXCB,
+    ADCAD8,
     PUSHDE,
     ADDAD8,
     SUBD8,
@@ -206,6 +207,7 @@ pub fn decode(opcode: u8) -> Instruction {
 
         0xC9 => Instruction::RET,
         0xCB => Instruction::PREFIXCB,
+        0xCE => Instruction::ADCAD8,
 
         // CALLA16
         0xCD => Instruction::CALLA16,

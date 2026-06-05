@@ -76,6 +76,7 @@ impl Cpu {
             Instruction::SUBD8 => self.sub_d8(bus),
             Instruction::CALLA16 => self.call_a16(bus),
             Instruction::PREFIXCB => self.prefix_cb(bus),
+            Instruction::ADCAD8 => self.adc_a_d8(bus),
             Instruction::RET => self.ret(bus),
             Instruction::PUSHHL => self.push_hl(bus),
             Instruction::ANDD8 => self.and_d8(bus),
@@ -819,13 +820,13 @@ impl Cpu {
     }
 
     fn pop_de(&mut self, bus: &mut Bus) -> u8 {
-        let lsb = bus.read8(self.regs.sp);
+        let lo = bus.read8(self.regs.sp);
         self.regs.sp = self.regs.sp.wrapping_add(1);
 
-        let msb = bus.read8(self.regs.sp);
+        let hi = bus.read8(self.regs.sp);
         self.regs.sp = self.regs.sp.wrapping_add(1);
 
-        let result = ((msb as u16) << 8) | (lsb as u16);
+        let result = ((hi as u16) << 8) | (lo as u16);
         self.regs.set_de(result);
 
         12
@@ -983,6 +984,31 @@ impl Cpu {
             3 => self.cb_set(y, z, bus),
             _ => unreachable!(),
         }
+    }
+
+    fn adc_a_d8(&mut self, bus: &mut Bus) -> u8 {
+        let n = bus.read8(self.regs.pc);
+        self.regs.pc = self.regs.pc.wrapping_add(1);
+
+        let a = self.regs.a;
+        let c = if self.regs.get_c() { 1 } else { 0 };
+
+        let full_sum = (a as u16).wrapping_add(n as u16).wrapping_add(c as u16) as u16;
+        let result = full_sum as u8;
+
+        // make sure to get low nibble addition
+        let low_sum = (a & 0x0F).wrapping_add(n & 0x0F).wrapping_add(c);
+
+        // important! write the result back to the register
+        self.regs.a = result;
+
+        // flags
+        self.regs.set_z(result == 0);
+        self.regs.set_n(false);
+        self.regs.set_h(low_sum > 0x0F);
+        self.regs.set_c(full_sum > 0xFF);
+
+        8
     }
 
     fn ret(&mut self, bus: &mut Bus) -> u8 {
